@@ -6,49 +6,174 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/canhlinh/log4go"
 )
 
 const (
-	DefaultTimezone = "Asia/Ho_Chi_Minh"
+	DefaultTimezone = "Asia/Shanghai"
 )
 
 var (
-	KeepAlivePeriod   = time.Second * 60
+	KeepAlivePeriod   = time.Second * 6
 	ReadSocketTimeout = 3 * time.Second
 )
 
-type ZK struct {
-	conn      *net.TCPConn
-	sessionID int
-	replyID   int
-	host      string
-	port      int
-	pin       int
-	loc       *time.Location
-	lastData  []byte
-	disabled  bool
-	capturing chan bool
+type logger interface {
+	Info(v ...interface{})
+	Infof(format string, v ...interface{})
+	Debug(v ...interface{})
+	Debugf(format string, v ...interface{})
+	Error(v ...interface{})
+	Errorf(format string, v ...interface{})
 }
 
-func NewZK(host string, port int, pin int, timezone string) *ZK {
+var Log logger
+
+type ZK struct {
+	conn         *net.TCPConn
+	sessionID    int
+	replyID      int
+	host         string
+	port         int
+	pin          int
+	loc          *time.Location
+	machineID    int
+	lastData     []byte
+	RtEventData  <-chan *DataMsg
+	ResponseData <-chan *DataMsg
+	lastCMD      int
+	disabled     bool
+	capturing    chan bool
+	done         chan bool
+	Log          logger
+}
+
+//machineID 机器 ID 用于识别唯一机器（可直接传0，由系统自动从机器上获取）
+//host 机器IP
+//port 端口 一般是 4370
+//timezone 时区
+func NewZK(machineID int, host string, port int, pin int, timezone string) *ZK {
+	if Log == nil {
+		Log = &gozkLogger{
+			stdLog: log.New(os.Stdout, "", log.LstdFlags),
+			errLog: log.New(os.Stderr, "", log.LstdFlags),
+		}
+	}
 	return &ZK{
+		machineID: machineID,
 		host:      host,
 		port:      port,
 		pin:       pin,
 		loc:       LoadLocation(timezone),
 		sessionID: 0,
 		replyID:   USHRT_MAX - 1,
+		done:      make(chan bool),
+		Log:       Log,
 	}
 }
 
-func (zk *ZK) Connect() error {
+func (zk *ZK) dataReceive() {
+	RtEventData := make(chan *DataMsg, 20)
+	ResponseData := make(chan *DataMsg)
+	defer func() {
+		close(RtEventData)
+		close(ResponseData)
+	}()
+
+	zk.RtEventData = RtEventData
+	zk.ResponseData = ResponseData
+
+	for {
+		select {
+		case <-zk.done:
+			zk.Log.Info(zk.machineID, "Exit dataReceive")
+			return
+		default:
+			data := make([]byte, 1032)
+			n, err := zk.conn.Read(data)
+
+			if err != nil || n < 16 {
+				if zk.lastCMD != CMD_REG_EVENT {
+					ResponseData <- &DataMsg{
+						Data: []byte(err.Error()),
+						Head: ZkHead{
+							Code: CMD_ACK_UNKNOWN,
+						},
+					}
+				}
+
+				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+					continue
+				}
+				zk.Log.Errorf("[%d] 接收数据失败,%v", zk.machineID, err)
+				//重新连接时会重置 zk.conn,这里等待重新连接成功后再继续。
+				zk.reConnect()
+				return
+			}
+			data = data[:n]
+
+			zk.Log.Debugf("[%d] Response[RAW]: %v", zk.machineID, data[8:])
+
+			header := mustUnpack([]string{"H", "H", "H", "H"}, data[8:16])
+			msg := &DataMsg{}
+			msg.Head.Code = header[0].(int)
+			msg.Head.CheckSum = header[1].(int)
+			msg.Head.SessionID = header[2].(int)
+			msg.Head.ReplyID = header[3].(int)
+			msg.Data = data[16:]
+			zk.Log.Debug(zk.machineID, "Response[USER]:", msg)
+			if msg.Head.Code == CMD_REG_EVENT {
+				RtEventData <- msg
+			} else {
+				ResponseData <- msg
+			}
+		}
+	}
+}
+
+//重新连接
+func (zk *ZK) reConnect() {
+	connTimes := 0
+	for {
+		time.Sleep(ReadSocketTimeout)
+		select {
+		case <-zk.done:
+			return
+		default:
+			connTimes++
+			if connTimes >= 20 { //重试超过20次等待一分钟再试
+				time.Sleep(time.Minute)
+			}
+			zk.Log.Info(zk.machineID, "检查到连接断开,正在尝试重新连接...", connTimes)
+			zk.conn = nil
+			err := zk.Connect()
+			if err != nil {
+				zk.Log.Error(zk.machineID, "连接失败", err)
+
+				continue
+			}
+			zk.Log.Info(zk.machineID, "重新连接成功", zk.sessionID)
+			if zk.capturing != nil {
+				if err := zk.regEvent(EF_ATTLOG); err != nil {
+					zk.Log.Error(zk.machineID, "激活实时事件失败", err)
+					close(zk.capturing)
+				} else {
+					zk.Log.Info(zk.machineID, "重新激活实时事件成功")
+				}
+			}
+			return
+		}
+	}
+}
+
+//todo 当 machineID＝0 时，连接成功后自动从机器上获取 ID
+func (zk *ZK) Connect() (err error) {
 	if zk.conn != nil {
-		return errors.New("Already connected")
+		zk.Log.Error(zk.machineID, "Already connected")
+		return nil
 	}
 
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", zk.host, zk.port), 3*time.Second)
@@ -57,15 +182,17 @@ func (zk *ZK) Connect() error {
 	}
 
 	tcpConnection := conn.(*net.TCPConn)
-	if err := tcpConnection.SetKeepAlive(true); err != nil {
+	if err = tcpConnection.SetKeepAlive(true); err != nil {
 		return err
 	}
 
-	if err := tcpConnection.SetKeepAlivePeriod(KeepAlivePeriod); err != nil {
+	if err = tcpConnection.SetKeepAlivePeriod(KeepAlivePeriod); err != nil {
 		return err
 	}
 
 	zk.conn = tcpConnection
+
+	go zk.dataReceive()
 
 	res, err := zk.sendCommand(CMD_CONNECT, nil, 8)
 	if err != nil {
@@ -85,8 +212,7 @@ func (zk *ZK) Connect() error {
 			return errors.New("unauthorized")
 		}
 	}
-
-	log.Println("Connected with session_id", zk.sessionID)
+	zk.Log.Info(zk.machineID, "Connected with session_id", zk.sessionID)
 	return nil
 }
 
@@ -106,51 +232,42 @@ func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (
 		return nil, err
 	}
 
+	zk.lastCMD = command
+	zk.Log.Debugf("[%d] DataSend[RAW]: %v", zk.machineID, header)
+	zk.Log.Debugf("[%d] DataSend[USER]: CMD:%d%v,SessionID:%d ReplayID:%d", zk.machineID, command, commandString, zk.sessionID, zk.replyID)
+
 	if n, err := zk.conn.Write(top); err != nil {
 		return nil, err
 	} else if n == 0 {
 		return nil, errors.New("Failed to write command")
 	}
 
-	zk.conn.SetReadDeadline(time.Now().Add(ReadSocketTimeout))
-	dataReceived := make([]byte, responseSize+8)
+	msg := <-zk.ResponseData
 
-	bytesReceived, err := zk.conn.Read(dataReceived)
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("GOT ERROR %s ON COMMAND %d", err.Error(), command)
+	if msg.Head.Code == CMD_ACK_UNKNOWN {
+		return nil, fmt.Errorf("GOT ERROR %s ON COMMAND %d", msg.Data, command)
 	}
 
-	if bytesReceived == 0 {
-		return nil, errors.New("TCP packet invalid")
-	}
-
-	receivedHeader, err := newBP().UnPack([]string{"H", "H", "H", "H"}, dataReceived[8:16])
-	if err != nil {
-		return nil, err
-	}
-
-	dataReceived = dataReceived[16:bytesReceived]
+	dataReceived := msg.Data
 	tcpLength := testTCPTop(dataReceived)
-	resCode := receivedHeader[0].(int)
-	commandID := receivedHeader[2].(int)
 
-	zk.replyID = receivedHeader[3].(int)
+	zk.replyID = msg.Head.ReplyID
 	zk.lastData = dataReceived
 
-	switch resCode {
+	switch msg.Head.Code {
 	case CMD_ACK_OK, CMD_PREPARE_DATA, CMD_DATA:
 		return &Response{
 			Status:    true,
-			Code:      resCode,
+			Code:      msg.Head.Code,
 			TCPLength: tcpLength,
-			CommandID: commandID,
+			CommandID: msg.Head.SessionID,
 		}, nil
 	default:
 		return &Response{
 			Status:    false,
-			Code:      resCode,
+			Code:      msg.Head.Code,
 			TCPLength: tcpLength,
-			CommandID: receivedHeader[2].(int),
+			CommandID: msg.Head.SessionID,
 		}, nil
 	}
 }
@@ -164,7 +281,7 @@ func (zk *ZK) Disconnect() error {
 	if _, err := zk.sendCommand(CMD_EXIT, nil, 8); err != nil {
 		return err
 	}
-
+	close(zk.done)
 	if err := zk.conn.Close(); err != nil {
 		return err
 	}
@@ -253,7 +370,7 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 			return nil, err
 		}
 
-		attendances = append(attendances, &Attendance{AttendedAt: timestamp, UserID: userID})
+		attendances = append(attendances, &Attendance{AttendedAt: timestamp, UserID: userID, SensorID: zk.machineID})
 		data = data[40:]
 	}
 
@@ -281,70 +398,44 @@ func (zk *ZK) GetUsers() error {
 	return nil
 }
 
-func (zk *ZK) LiveCapture() (chan *Attendance, error) {
+func (zk *ZK) LiveCapture(chanAttendance chan<- *Attendance) error {
 	if zk.capturing != nil {
-		return nil, errors.New("Is capturing")
-	}
-
-	if err := zk.GetUsers(); err != nil {
-		return nil, err
-	}
-
-	if err := zk.verifyUser(); err != nil {
-		return nil, err
+		return errors.New("Is capturing")
 	}
 
 	if zk.disabled {
 		if err := zk.EnableDevice(); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	if err := zk.regEvent(EF_ATTLOG); err != nil {
-		return nil, err
+		return err
 	}
 
-	log4go.Info("Start capturing")
-	zk.capturing = make(chan bool, 1)
-	c := make(chan *Attendance, 1)
+	zk.Log.Info(zk.machineID, "Start capturing")
+	zk.capturing = make(chan bool)
 
 	go func() {
-
 		defer func() {
-			log4go.Info("Stopped capturing")
-			zk.regEvent(0)
-			close(c)
+			zk.Log.Debug(zk.machineID, "停止实时事件接收!")
+			close(zk.capturing)
+			zk.capturing = nil
 		}()
-
 		for {
 			select {
 			case <-zk.capturing:
+				zk.Log.Debug("接收到 capturing 信号")
 				return
-			default:
-
-				data, err := zk.receiveData(1032, KeepAlivePeriod)
-				if err != nil && !strings.Contains(err.Error(), "timeout") {
-					log4go.Error(err)
-					return
-				}
-				if err := zk.ackOK(); err != nil {
-					return
-				}
-
-				if len(data) == 0 {
-					log4go.Info("Continue")
+			case <-zk.done:
+				zk.Log.Debug("接收到 done 信号")
+				return
+			case msg, ok := <-zk.RtEventData:
+				if !ok {
+					time.Sleep(time.Second)
 					continue
 				}
-
-				// size := mustUnpack([]string{"H", "H", "I"}, data[:8])[2].(int)
-				header := mustUnpack([]string{"H", "H", "H", "H"}, data[8:16])
-				data = data[16:]
-
-				if header[0].(int) != CMD_REG_EVENT {
-					log.Println("Skip REG EVENT")
-					continue
-				}
-
+				data := msg.Data
 				for len(data) >= 12 {
 					unpack := []interface{}{}
 
@@ -366,23 +457,30 @@ func (zk *ZK) LiveCapture() (chan *Attendance, error) {
 
 					userID, err := strconv.ParseInt(strings.Replace(unpack[0].(string), "\x00", "", -1), 10, 64)
 					if err != nil {
-						log.Println(err)
+						zk.Log.Error(err)
 						continue
 					}
+					attLog := &Attendance{UserID: userID, AttendedAt: timestamp, VerifyMethod: uint(unpack[1].(int)), SensorID: zk.machineID}
+					zk.Log.Debug(zk.machineID, "打卡记录", attLog)
 
-					c <- &Attendance{UserID: userID, AttendedAt: timestamp}
-					log.Printf("UserID %v timestampe %v \n", userID, timestamp)
+					chanAttendance <- attLog
 				}
 			}
 		}
-
 	}()
 
-	return c, nil
+	return nil
 }
 
 func (zk ZK) StopCapture() {
+	if zk.capturing == nil {
+		return
+	}
+	zk.Log.Info(zk.machineID, "Stopping capturing")
+	zk.regEvent(0)
 	zk.capturing <- false
+	<-zk.capturing
+	zk.Log.Info(zk.machineID, "Stopped capturing")
 }
 
 func (zk ZK) Clone() *ZK {

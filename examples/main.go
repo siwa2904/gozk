@@ -7,17 +7,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/canhlinh/gozk"
+	"github.com/chenall/gozk"
 )
 
 func main() {
-	zkSocket := gozk.NewZK("192.168.0.201", 4370, 0, gozk.DefaultTimezone)
+	zkSocket := gozk.NewZK(0, "192.168.0.201", 4370, 0, gozk.DefaultTimezone)
 	if err := zkSocket.Connect(); err != nil {
 		panic(err)
 	}
 
-	c, err := zkSocket.LiveCapture()
-	if err != nil {
+	c := make(chan *gozk.Attendance, 50)
+
+	if err := zkSocket.LiveCapture(c); err != nil {
 		panic(err)
 	}
 
