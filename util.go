@@ -137,9 +137,30 @@ func testTCPTop(packet []byte) int {
 	return 0
 }
 
+func MakeCommonKey(key, sessionid int, ticks int) ([]byte, error) {
+	return makeCommKey(key, sessionid, ticks)
+}
+
+//by chenall 原版 makeCommKey1 的算法无法正常使用，这个是根据网上的资料重写的。
+func makeCommKey(key, sessionid int, ticks int) ([]byte, error) {
+	k := 0
+	//二进制反转
+	for i := 31; i >= 0 && key != 0; i-- {
+		k |= key & 1 << i
+		key >>= 1
+	}
+	k += sessionid
+	k ^= 0x4f534b5a //ZKSO
+	//高16位和低16位互换
+	k = (k&0xffff)<<16 | k>>16
+	k = (k & 0xFF00FFFF) ^ (ticks | ticks<<8 | (ticks << 16) | (ticks << 24))
+	return newBP().Pack([]string{"I"}, []interface{}{k})
+}
+
+/*
 // makeCommKey take a password and session_id and scramble them to send to the time clock.
 // copied from commpro.c - MakeKey
-func makeCommKey(key, sessionID int, ticks int) ([]byte, error) {
+func makeCommKey1(key, sessionID int, ticks int) ([]byte, error) {
 	k := 0
 
 	for i := uint(0); i < 32; i++ {
@@ -176,6 +197,7 @@ func makeCommKey(key, sessionID int, ticks int) ([]byte, error) {
 
 	return pack, nil
 }
+*/
 
 func mustUnpack(pad []string, data []byte) []interface{} {
 	value, err := newBP().UnPack(pad, data)
