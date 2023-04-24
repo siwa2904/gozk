@@ -12,6 +12,6 @@ GOZK is a library to help gopher interact with ZK fingerprint machine
 
 ## Getting started
 
-Get source: ```go get github.com/chenall/gozk```
+Get source: ```go get github.com/siwa2904/gozk```
 
 [Sample](examples/main.go)
