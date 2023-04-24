@@ -13,6 +13,13 @@ type Response struct {
 }
 
 type User struct {
+	UID       int
+	UserID    string
+	Name      string
+	Privilege int
+	Password  string
+	GroupID   int
+	Card      string
 }
 
 type Attendance struct {

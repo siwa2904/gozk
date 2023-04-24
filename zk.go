@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/qiniu/iconv"
 )
 
 const (
@@ -157,7 +159,7 @@ func (zk *ZK) dataReceive() {
 			data := make([]byte, 1032)
 			conn.SetReadDeadline(time.Now().Add(time.Minute))
 			n, err := conn.Read(data)
-			zk.Log.Debug("接收数据", n, zk.lastCMD, err)
+			zk.Log.Debug("รับข้อมูล", n, zk.lastCMD, err)
 			if err != nil || n < 16 {
 				if zk.lastCMD != CMD_REG_EVENT && zk.lastCMD != 0 {
 					zk.ResponseData <- &DataMsg{
@@ -169,16 +171,16 @@ func (zk *ZK) dataReceive() {
 				}
 
 				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-					zk.Log.Debug("接收数据超时,判断连接状态")
+					zk.Log.Debug("Timeout")
 					go func() {
 						_, e := zk.sendCommand(CMD_GET_TIME, nil, 8)
 						if e != nil {
-							zk.Log.Debug("错误", e)
+							zk.Log.Debug("ผิดพลาด", e)
 						}
 					}()
 					continue
 				}
-				zk.Log.Error("接收数据失败", err)
+				zk.Log.Error("ไม่สามารถรับข้อมูลได้", err)
 				zk.attLogFunc(&Attendance{UserID: -1, AttendedAt: time.Now(), IsInValid: true, VerifyMethod: 0, SensorID: zk.machineID})
 				connTimes = 0
 				testConn <- true
@@ -215,7 +217,7 @@ func (zk *ZK) dataReceive() {
 	}
 }
 
-//重新连接
+// เชื่อมต่อใหม่
 func (zk *ZK) reConnect() {
 	connTimes := 0
 
@@ -227,23 +229,23 @@ func (zk *ZK) reConnect() {
 		default:
 
 			connTimes++
-			if connTimes >= 20 { //重试超过20次等待一分钟再试
+			if connTimes >= 20 { //ลองใหม่มากกว่า 20 ครั้งและรอหนึ่งนาทีเพื่อลองอีกครั้ง
 				time.Sleep(time.Minute)
 			}
 
-			zk.Log.Info("检查到连接断开,正在尝试重新连接...", connTimes)
+			zk.Log.Info("ตรวจสอบว่าการเชื่อมต่อถูกตัดการเชื่อมต่อ พยายามเชื่อมต่อใหม่...", connTimes)
 
 			err := zk.Connect()
 			if err != nil {
-				zk.Log.Error("连接失败", err)
+				zk.Log.Error("การเชื่อมต่อล้มเหลว", err)
 				continue
 			}
-			zk.Log.Info("重新连接成功", zk.sessionID)
+			zk.Log.Info("เชื่อมต่อใหม่เรียบร้อยแล้ว", zk.sessionID)
 			if zk.capturing != nil {
 				if err := zk.regEvent(EF_ATTLOG); err != nil {
-					zk.Log.Error("激活实时事件失败", err)
+					zk.Log.Error("ลงทะเบียนรับ Event การลงเวลาไม่สำเร็จ", err)
 				} else {
-					zk.Log.Info("重新激活实时事件成功")
+					zk.Log.Info("ลงทะเบียนรับ Event การลงเวลาสำเร็จ")
 				}
 			}
 			return
@@ -256,15 +258,15 @@ func (zk *ZK) TestConnect() (conn net.Conn, err error) {
 	return
 }
 
-//todo 当 machineID＝0 时，连接成功后自动从机器上获取 ID
+// todo 当 machineID＝0 时，连接成功后自动从机器上获取 ID
 func (zk *ZK) Connect() (err error) {
-	zk.Log.Info("准备连接")
+	zk.Log.Info("เริ่มการเชื่อมต่อ")
 	zk.lck.RLock()
 	tcpConnection := zk.conn
 	zk.lck.RUnlock()
 
 	if tcpConnection != nil {
-		zk.Log.Error("已连接", zk.sessionID)
+		zk.Log.Error("เชื่อมต่อ", zk.sessionID)
 		return nil
 	}
 
@@ -288,7 +290,7 @@ func (zk *ZK) Connect() (err error) {
 	zk.replyID = USHRT_MAX - 1
 	zk.lck.Unlock()
 
-	//多次连接只运行一次数据接收后台
+	//การเชื่อมต่อหลายรายการเรียกใช้พื้นหลังการรับข้อมูลเพียงครั้งเดียว
 	if zk.ResponseData == nil {
 		zk.ResponseData = make(chan *DataMsg)
 		go zk.dataReceive()
@@ -312,7 +314,7 @@ func (zk *ZK) Connect() (err error) {
 			return errors.New("unauthorized")
 		}
 	}
-	zk.Log.Info("连接成功,连接会话ID", zk.sessionID)
+	zk.Log.Info("การเชื่อมต่อสำเร็จ sessionID", zk.sessionID)
 	return nil
 }
 
@@ -506,9 +508,33 @@ func (zk *ZK) GetUsers() error {
 	return nil
 }
 
+func (zk *ZK) SetUser(user User) error {
+
+	cd, err := iconv.Open("tis-620", "utf-8") // convert utf-8 to gbk
+	if err != nil {
+		fmt.Println("iconv.Open failed!")
+		return err
+	}
+	defer cd.Close()
+	userTh := cd.ConvString(user.Name)
+	user.Name = userTh
+	commandString, err := makeUserCommand(user)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	res, err := zk.sendCommand(CMD_USER_WRQ, commandString, 50)
+	if err != nil {
+		fmt.Println("AddErr::", err)
+		return err
+	}
+	zk.Log.Info("Add Resp ", res)
+	return nil
+}
+
 func (zk *ZK) processEvent(msg DataMsg) {
 	data := msg.Data
-	//一条信息里面可能会有多条记录，这里直接循环处理
+	//อาจมีบันทึกหลายรายการในข้อมูลหนึ่งๆ ซึ่งจะถูกประมวลผลโดยตรงในลูปที่นี่
 	for len(data) >= 12 {
 		var unpack []interface{}
 
@@ -534,7 +560,7 @@ func (zk *ZK) processEvent(msg DataMsg) {
 			continue
 		}
 		attLog := &Attendance{UserID: userID, AttendedAt: timestamp, VerifyMethod: uint(unpack[1].(int)), SensorID: zk.machineID}
-		zk.Log.Debug("打卡记录", attLog)
+		zk.Log.Debug("บันทึกลงเวลา", attLog)
 		zk.attLogFunc(attLog)
 	}
 }
@@ -554,7 +580,7 @@ func (zk *ZK) LiveCapture(logFunc AttLogFunc) error {
 		return err
 	}
 
-	zk.Log.Info("开始实时事件接收")
+	zk.Log.Info("เริ่มการรับเหตุการณ์ Realtime")
 	zk.capturing = make(chan bool)
 	zk.attLogFunc = logFunc
 	return nil

@@ -3,6 +3,7 @@ package gozk
 import (
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"time"
 
 	binarypack "github.com/canhlinh/go-binary-pack"
@@ -141,7 +142,7 @@ func MakeCommonKey(key, sessionid int, ticks int) ([]byte, error) {
 	return makeCommKey(key, sessionid, ticks)
 }
 
-//by chenall 原版 makeCommKey1 的算法无法正常使用，这个是根据网上的资料重写的。
+// by chenall 原版 makeCommKey1 的算法无法正常使用，这个是根据网上的资料重写的。
 func makeCommKey(key, sessionid int, ticks int) ([]byte, error) {
 	k := 0
 	//二进制反转
@@ -151,7 +152,6 @@ func makeCommKey(key, sessionid int, ticks int) ([]byte, error) {
 	}
 	k += sessionid
 	k ^= 0x4f534b5a //ZKSO
-	//高16位和低16位互换
 	k = (k&0xffff)<<16 | k>>16
 	k = (k & 0xFF00FFFF) ^ (ticks | ticks<<8 | (ticks << 16) | (ticks << 24))
 	return newBP().Pack([]string{"I"}, []interface{}{k})
@@ -198,6 +198,23 @@ func makeCommKey1(key, sessionID int, ticks int) ([]byte, error) {
 	return pack, nil
 }
 */
+
+func makeUserCommand(user User) ([]byte, error) {
+
+	nn, _ := strconv.Atoi(user.Card)
+	cardNo, er := newBP().Pack([]string{"I"}, []interface{}{nn})
+	if er != nil {
+		fmt.Println("cardNo Error:: ", er)
+	}
+
+	format := []string{"H", "B", "8s", "24s", "10s", "B", "H", "9s", "15s"}
+	values := []interface{}{user.UID, user.Privilege, user.Password, user.Name, string(cardNo), user.GroupID, 0, user.UserID, ""}
+	bpData, err := newBP().Pack(format, values)
+	if err != nil {
+		fmt.Println("makeUserCommand Error:: ", err)
+	}
+	return bpData, err
+}
 
 func mustUnpack(pad []string, data []byte) []interface{} {
 	value, err := newBP().UnPack(pad, data)
