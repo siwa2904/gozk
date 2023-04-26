@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	DefaultTimezone = "Asia/Shanghai"
+	DefaultTimezone = "Asia/Bangkok"
 )
 
 var (
@@ -33,7 +33,7 @@ type logger interface {
 	Errorf(format string, v ...interface{})
 }
 
-// AttLogFunc 实时打卡日志处理函数
+// AttLogFunc ฟังก์ชันการประมวลผลบันทึกการเช็คอินตามเวลาจริง
 type AttLogFunc func(attendance *Attendance)
 
 type ZK struct {
@@ -57,10 +57,10 @@ type ZK struct {
 	attLogFunc   AttLogFunc
 }
 
-//machineID 机器 ID 用于识别唯一机器（可直接传0，由系统自动从机器上获取）
-//host 机器IP
-//port 端口 一般是 4370
-//timezone 时区
+//รหัสเครื่อง หมายเลขเครื่องใช้เพื่อระบุเครื่องที่ไม่ซ้ำกัน (สามารถผ่าน 0 ได้โดยตรง และระบบจะรับรหัสจากเครื่องโดยอัตโนมัติ)
+// IP เครื่องโฮสต์
+// port โดยทั่วไปคือ 4370
+// เขตเวลา เขตเวลา
 
 func NewZK(machineID int, host string, port int, pin int, timezone string) *ZK {
 	prefix := fmt.Sprintf("[%03d]", machineID)
@@ -122,11 +122,11 @@ func (zk *ZK) dataReceive() {
 	for {
 		select {
 		case <-zk.done:
-			zk.Log.Info("停止接收数据")
+			zk.Log.Info("หยุดรับข้อมูล")
 			return
 		case <-testConn:
 			connTimes += 1
-			zk.Log.Info("连接失败15秒后重试", connTimes)
+			zk.Log.Info("ลองอีกครั้งหลังจาก 15 วินาทีที่การเชื่อมต่อล้มเหลว", connTimes)
 			for i := 0; i <= connTimes/10; i++ {
 				<-time.After(time.Second * 15)
 			}
@@ -137,7 +137,7 @@ func (zk *ZK) dataReceive() {
 				_ = conn.Close()
 				err := zk.Disconnect()
 				if err != nil {
-					zk.Log.Error("断开连接失败", err)
+					zk.Log.Error("ตัดการเชื่อมต่อล้มเหลว", err)
 				}
 				zk.lck.Lock()
 				if zk.conn != nil {
@@ -209,7 +209,7 @@ func (zk *ZK) dataReceive() {
 			} else {
 				if zk.lastCMD == CMD_GET_TIME {
 					t, e := zk.decodeTime(msg.Data)
-					zk.Log.Debug("当前卡机时间", t, e)
+					zk.Log.Debug("เวลาปัจจุบัน", t, e)
 				}
 				zk.ResponseData <- &msg
 			}
@@ -258,7 +258,7 @@ func (zk *ZK) TestConnect() (conn net.Conn, err error) {
 	return
 }
 
-// todo 当 machineID＝0 时，连接成功后自动从机器上获取 ID
+// สิ่งที่ต้องทำ เมื่อ machineID=0 รับ ID จากเครื่องโดยอัตโนมัติหลังจากการเชื่อมต่อสำเร็จ
 func (zk *ZK) Connect() (err error) {
 	zk.Log.Info("เริ่มการเชื่อมต่อ")
 	zk.lck.RLock()
