@@ -396,7 +396,7 @@ func (zk *ZK) Disconnect() error {
 	zk.conn = nil
 	zk.lck.Unlock()
 
-	zk.Log.Debug("连接断开", zk.sessionID)
+	zk.Log.Debug("ตัดการเชื่อมต่อ", zk.sessionID)
 	return nil
 }
 
