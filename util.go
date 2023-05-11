@@ -125,13 +125,15 @@ func testTCPTop(packet []byte) int {
 	if len(packet) <= 8 {
 		return 0
 	}
-
+	fmt.Println("testTCPTopB8:: ", packet[:8])
 	tcpHeader, err := newBP().UnPack([]string{"H", "H", "I"}, packet[:8])
+	fmt.Println("testTCPTopB8UP:: ", tcpHeader)
 	if err != nil {
+		fmt.Println("testTCPTop Error:: ", err)
 		return 0
 	}
 
-	if tcpHeader[0].(int) == MACHINE_PREPARE_DATA_1 || tcpHeader[1].(int) == MACHINE_PREPARE_DATA_2 {
+	if tcpHeader[0].(int) == 13876 || tcpHeader[0].(int) == MACHINE_PREPARE_DATA_1 || tcpHeader[1].(int) == MACHINE_PREPARE_DATA_2 {
 		return tcpHeader[2].(int)
 	}
 
@@ -157,48 +159,6 @@ func makeCommKey(key, sessionid int, ticks int) ([]byte, error) {
 	return newBP().Pack([]string{"I"}, []interface{}{k})
 }
 
-/*
-// makeCommKey take a password and session_id and scramble them to send to the time clock.
-// copied from commpro.c - MakeKey
-func makeCommKey1(key, sessionID int, ticks int) ([]byte, error) {
-	k := 0
-
-	for i := uint(0); i < 32; i++ {
-		if (key & (1 << i)) > 0 {
-			k = (k<<1 | 1)
-		} else {
-			k = k << 1
-		}
-	}
-
-	k += sessionID
-
-	pack, _ := newBP().Pack([]string{"I"}, []interface{}{k})
-	unpack := mustUnpack([]string{"B", "B", "B", "B"}, pack)
-
-	pack, _ = newBP().Pack([]string{"B", "B", "B", "B"}, []interface{}{
-		unpack[0].(int) ^ int('Z'),
-		unpack[1].(int) ^ int('K'),
-		unpack[2].(int) ^ int('S'),
-		unpack[3].(int) ^ int('O'),
-	})
-
-	unpack = mustUnpack([]string{"H", "H"}, pack)
-	pack, _ = newBP().Pack([]string{"H", "H"}, []interface{}{unpack[0], unpack[1]})
-
-	b := 0xff & ticks
-	unpack = mustUnpack([]string{"B", "B", "B", "B"}, pack)
-	pack, _ = newBP().Pack([]string{"B", "B", "B", "B"}, []interface{}{
-		unpack[0].(int) ^ b,
-		unpack[1].(int) ^ b,
-		b,
-		unpack[3].(int) ^ b,
-	})
-
-	return pack, nil
-}
-*/
-
 func makeUserCommand(user User) ([]byte, error) {
 
 	nn, _ := strconv.Atoi(user.Card)
@@ -216,6 +176,16 @@ func makeUserCommand(user User) ([]byte, error) {
 	return bpData, err
 }
 
+func makeGetUsertTmplateCommand(uid int, temp int) ([]byte, error) {
+
+	format := []string{"H", "B"}
+	values := []interface{}{uid, temp}
+	bpData, err := newBP().Pack(format, values)
+	if err != nil {
+		fmt.Println("makeGetUsertTmplateCommand Error:: ", err)
+	}
+	return bpData, err
+}
 func mustUnpack(pad []string, data []byte) []interface{} {
 	value, err := newBP().UnPack(pad, data)
 	if err != nil {

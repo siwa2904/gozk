@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qiniu/iconv"
+	"github.com/djimenez/iconv-go"
 )
 
 const (
@@ -102,14 +102,14 @@ func (zk *ZK) connRead(conn *net.TCPConn) (msg *DataMsg, err error) {
 	}
 
 	data = data[:n]
-	zk.Log.Debugf("Response[RAW]: %v", data[8:])
+	// zk.Log.Debugf("Response[RAW]: %v", data[8:])
 	header := mustUnpack([]string{"H", "H", "H", "H"}, data[8:16])
 	msg.Head.Code = header[0].(int)
 	msg.Head.CheckSum = header[1].(int)
 	msg.Head.SessionID = header[2].(int)
 	msg.Head.ReplyID = header[3].(int)
 	msg.Data = data[16:]
-	zk.Log.Debug("Response[USER]:", msg)
+	// zk.Log.Debug("Response[USER]:", msg)
 	return
 }
 
@@ -128,7 +128,7 @@ func (zk *ZK) dataReceive() {
 			connTimes += 1
 			zk.Log.Info("ลองอีกครั้งหลังจาก 15 วินาทีที่การเชื่อมต่อล้มเหลว", connTimes)
 			for i := 0; i <= connTimes/10; i++ {
-				<-time.After(time.Second * 15)
+				<-time.After(time.Second * 5)
 			}
 			conn, e := zk.TestConnect()
 			if e != nil {
@@ -194,7 +194,7 @@ func (zk *ZK) dataReceive() {
 
 			data = data[:n]
 
-			zk.Log.Debugf("Response[RAW]: %v", data[8:])
+			// zk.Log.Debugf("Response[RAW]: %v", data[8:])
 
 			header := mustUnpack([]string{"H", "H", "H", "H"}, data[8:16])
 			msg := DataMsg{}
@@ -203,7 +203,10 @@ func (zk *ZK) dataReceive() {
 			msg.Head.SessionID = header[2].(int)
 			msg.Head.ReplyID = header[3].(int)
 			msg.Data = data[16:]
-			zk.Log.Debug("Response[USER]:", msg)
+
+			datas := mustUnpack([]string{"H", "H", "H", "H"}, data[:16])
+			fmt.Println("Datasssss::", datas)
+			// zk.Log.Debug("Response[USER]:", msg)
 			if msg.Head.Code == CMD_REG_EVENT {
 				zk.processEvent(msg)
 			} else {
@@ -469,7 +472,7 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		fmt.Println("RecVVV=", v)
 		timestamp, err := zk.decodeTime([]byte(v[3].(string)))
 		if err != nil {
 			return nil, err
@@ -496,27 +499,30 @@ func (zk *ZK) GetUsers() error {
 		return err
 	}
 
-	_, size, err := zk.readWithBuffer(CMD_USERTEMP_RRQ, FCT_USER, 0)
+	data, size, err := zk.readWithBuffer(CMD_USERTEMP_RRQ, FCT_USER, 0)
 	if err != nil {
+		fmt.Println("GetUsersErr::", err)
 		return err
 	}
 
 	if size < 4 {
+		fmt.Println("GetUsersErr<4::", size)
 		return nil
 	}
-
+	fmt.Println("data", data)
 	return nil
 }
 
 func (zk *ZK) SetUser(user User) error {
 
-	cd, err := iconv.Open("tis-620", "utf-8") // convert utf-8 to gbk
+	// cd, err := iconv.Open("tis-620", "utf-8") // convert utf-8 to gbk
+	cd, err := iconv.ConvertString(user.Name, "utf-8", "tis-620")
 	if err != nil {
 		fmt.Println("iconv.Open failed!")
 		return err
 	}
-	defer cd.Close()
-	userTh := cd.ConvString(user.Name)
+	// defer cd.Close()
+	userTh := cd
 	user.Name = userTh
 	commandString, err := makeUserCommand(user)
 	if err != nil {
@@ -532,12 +538,33 @@ func (zk *ZK) SetUser(user User) error {
 	return nil
 }
 
+func (zk *ZK) GetUserTemp(uid int, temp_id int, user_id string) error {
+	_, err := zk.readSize()
+	if err != nil {
+		return err
+	}
+
+	data, size, err := zk.readWithBuffer(CMD_DB_RRQ, FCT_FINGERTMP, 0)
+	if err != nil {
+		fmt.Println("GetUsersErr::", err)
+		return err
+	}
+
+	if size < 4 {
+		fmt.Println("GetUsersErr<4::", size)
+		return nil
+	}
+	fmt.Println("data", data)
+	return nil
+}
+
 func (zk *ZK) processEvent(msg DataMsg) {
 	data := msg.Data
+
 	//อาจมีบันทึกหลายรายการในข้อมูลหนึ่งๆ ซึ่งจะถูกประมวลผลโดยตรงในลูปที่นี่
 	for len(data) >= 12 {
 		var unpack []interface{}
-
+		fmt.Println(data)
 		if len(data) == 12 {
 			unpack = mustUnpack([]string{"I", "B", "B", "6s"}, data)
 			data = data[12:]
@@ -552,6 +579,11 @@ func (zk *ZK) processEvent(msg DataMsg) {
 			data = data[52:]
 		}
 
+		fmt.Println("set_0", unpack[0].(string))
+		fmt.Println("set_1", strconv.Itoa(unpack[1].(int)))
+		fmt.Println("set_2", strconv.Itoa(unpack[2].(int)))
+		fmt.Println("set_3", unpack[3].(string))
+
 		timestamp := zk.decodeTimeHex([]byte(unpack[3].(string)))
 
 		userID, err := strconv.ParseInt(strings.Replace(unpack[0].(string), "\x00", "", -1), 10, 64)
@@ -559,6 +591,7 @@ func (zk *ZK) processEvent(msg DataMsg) {
 			zk.Log.Error(err)
 			continue
 		}
+
 		attLog := &Attendance{UserID: userID, AttendedAt: timestamp, VerifyMethod: uint(unpack[1].(int)), SensorID: zk.machineID}
 		zk.Log.Debug("บันทึกลงเวลา", attLog)
 		zk.attLogFunc(attLog)
@@ -583,6 +616,22 @@ func (zk *ZK) LiveCapture(logFunc AttLogFunc) error {
 	zk.Log.Info("เริ่มการรับเหตุการณ์ Realtime")
 	zk.capturing = make(chan bool)
 	zk.attLogFunc = logFunc
+	return nil
+}
+
+func (zk *ZK) SetTime(settime time.Time) error {
+	// zk.encodeTime()
+	format := []string{"I"}
+	values := []interface{}{zk.encodeTime(settime)}
+	bpData, err := newBP().Pack(format, values)
+	if err != nil {
+		return err
+	}
+	rep, err := zk.sendCommand(CMD_SET_TIME, bpData, 1032)
+	if err != nil {
+		return err
+	}
+	fmt.Println("SetTime", rep)
 	return nil
 }
 

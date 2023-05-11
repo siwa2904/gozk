@@ -31,16 +31,13 @@ func (zk *ZK) readWithBuffer(command, fct, ext int) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-
 	res, err := zk.sendCommand(1503, commandString, 1024)
 	if err != nil {
 		return nil, 0, err
 	}
-
 	if !res.Status {
 		return nil, 0, errors.New("RWB Not supported")
 	}
-
 	if res.Code == CMD_DATA {
 
 		if need := res.TCPLength - 8 - len(zk.lastData); need > 0 {
@@ -386,4 +383,10 @@ func (zk *ZK) decodeTimeHex(timehex []byte) time.Time {
 
 	year += 2000
 	return time.Date(year, time.Month(month), day, hour, minute, second, 0, zk.loc)
+}
+
+func (zk *ZK) encodeTime(t time.Time) int {
+	d := (((t.Year()%100)*12*31+((int(t.Month())-1)*31)+t.Day()-1)*(24*60*60) + (t.Hour()*60+t.Minute())*60 + t.Second())
+
+	return d
 }

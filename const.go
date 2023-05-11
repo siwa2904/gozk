@@ -47,6 +47,7 @@ const (
 	CMD_DOORSTATE_RRQ   = 75 // Obtain the door condition
 	CMD_WRITE_MIFARE    = 76 // Write the Mifare card
 	CMD_EMPTY_MIFARE    = 78 // Clear the Mifare card
+	CMD_GET_USERTEMP    = 88
 
 	CMD_GET_TIME  = 201 // Obtain the machine time
 	CMD_SET_TIME  = 202 // Set machines time

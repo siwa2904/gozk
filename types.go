@@ -28,7 +28,8 @@ type Attendance struct {
 	IsInValid    bool      // 0 记录无效，1 记录有效。在指纹门禁机组拒绝或时间段原因拒绝开门时，该变量会返回无效值。
 	AttState     uint      //考勤状态，表示 Checkin checkOut 等，值的范围为 0-5。超出无效。
 	VerifyMethod uint      //比对方式，0，密码。1，指纹验证。
-	SensorID     int       //传感器 ID ,机器 ID
+	SensorID     int
+	UUID         int64 //传感器 ID ,机器 ID
 }
 
 type ZkHead struct {
