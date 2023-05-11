@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/djimenez/iconv-go"
 )
 
 const (
@@ -516,14 +514,14 @@ func (zk *ZK) GetUsers() error {
 func (zk *ZK) SetUser(user User) error {
 
 	// cd, err := iconv.Open("tis-620", "utf-8") // convert utf-8 to gbk
-	cd, err := iconv.ConvertString(user.Name, "utf-8", "tis-620")
-	if err != nil {
-		fmt.Println("iconv.Open failed!")
-		return err
-	}
+	// cd, err := iconv.ConvertString(user.Name, "utf-8", "tis-620")
+	// if err != nil {
+	// 	fmt.Println("iconv.Open failed!")
+	// 	return err
+	// }
 	// defer cd.Close()
-	userTh := cd
-	user.Name = userTh
+	// userTh := cd
+	// user.Name = userTh
 	commandString, err := makeUserCommand(user)
 	if err != nil {
 		fmt.Println(err)
