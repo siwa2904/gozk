@@ -120,11 +120,11 @@ func (zk *ZK) dataReceive() {
 	for {
 		select {
 		case <-zk.done:
-			zk.Log.Info("หยุดรับข้อมูล")
+			zk.Log.Info(zk.host + ": หยุดรับข้อมูล")
 			return
 		case <-testConn:
 			connTimes += 1
-			zk.Log.Info("ลองอีกครั้งหลังจาก 15 วินาทีที่การเชื่อมต่อล้มเหลว", connTimes)
+			zk.Log.Info(zk.host+": ลองอีกครั้งหลังจาก 15 วินาทีที่การเชื่อมต่อล้มเหลว", connTimes)
 			for i := 0; i <= connTimes/10; i++ {
 				<-time.After(time.Second * 5)
 			}
@@ -135,7 +135,7 @@ func (zk *ZK) dataReceive() {
 				_ = conn.Close()
 				err := zk.Disconnect()
 				if err != nil {
-					zk.Log.Error("ตัดการเชื่อมต่อล้มเหลว", err)
+					zk.Log.Error(zk.host+": ตัดการเชื่อมต่อล้มเหลว", err)
 				}
 				zk.lck.Lock()
 				if zk.conn != nil {
@@ -157,7 +157,7 @@ func (zk *ZK) dataReceive() {
 			data := make([]byte, 1032)
 			conn.SetReadDeadline(time.Now().Add(time.Minute))
 			n, err := conn.Read(data)
-			zk.Log.Debug("รับข้อมูล", n, zk.lastCMD, err)
+			zk.Log.Debug(zk.host+": รับข้อมูล", n, zk.lastCMD, err)
 			if err != nil || n < 16 {
 				if zk.lastCMD != CMD_REG_EVENT && zk.lastCMD != 0 {
 					zk.ResponseData <- &DataMsg{
@@ -169,16 +169,16 @@ func (zk *ZK) dataReceive() {
 				}
 
 				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-					zk.Log.Debug("Timeout")
+					zk.Log.Debug(zk.host + ": Timeout")
 					go func() {
 						_, e := zk.sendCommand(CMD_GET_TIME, nil, 8)
 						if e != nil {
-							zk.Log.Debug("ผิดพลาด", e)
+							zk.Log.Debug(zk.host+": ผิดพลาด", e)
 						}
 					}()
 					continue
 				}
-				zk.Log.Error("ไม่สามารถรับข้อมูลได้", err)
+				zk.Log.Error(zk.host+": ไม่สามารถรับข้อมูลได้", err)
 				zk.attLogFunc(&Attendance{UserID: -1, AttendedAt: time.Now(), IsInValid: true, VerifyMethod: 0, SensorID: zk.machineID})
 				connTimes = 0
 				testConn <- true
@@ -203,14 +203,14 @@ func (zk *ZK) dataReceive() {
 			msg.Data = data[16:]
 
 			datas := mustUnpack([]string{"H", "H", "H", "H"}, data[:16])
-			fmt.Println("Datasssss::", datas)
+			fmt.Println(zk.host+": Datasssss::", datas)
 			// zk.Log.Debug("Response[USER]:", msg)
 			if msg.Head.Code == CMD_REG_EVENT {
 				zk.processEvent(msg)
 			} else {
 				if zk.lastCMD == CMD_GET_TIME {
 					t, e := zk.decodeTime(msg.Data)
-					zk.Log.Debug("เวลาปัจจุบัน", t, e)
+					zk.Log.Debug(zk.host+": เวลาปัจจุบัน", t, e)
 				}
 				zk.ResponseData <- &msg
 			}
@@ -261,13 +261,13 @@ func (zk *ZK) TestConnect() (conn net.Conn, err error) {
 
 // สิ่งที่ต้องทำ เมื่อ machineID=0 รับ ID จากเครื่องโดยอัตโนมัติหลังจากการเชื่อมต่อสำเร็จ
 func (zk *ZK) Connect() (err error) {
-	zk.Log.Info("เริ่มการเชื่อมต่อ")
+	zk.Log.Info(zk.host + ": เริ่มการเชื่อมต่อ")
 	zk.lck.RLock()
 	tcpConnection := zk.conn
 	zk.lck.RUnlock()
 
 	if tcpConnection != nil {
-		zk.Log.Error("เชื่อมต่อ", zk.sessionID)
+		zk.Log.Error(zk.host+": เชื่อมต่อ", zk.sessionID)
 		return nil
 	}
 
@@ -312,10 +312,10 @@ func (zk *ZK) Connect() (err error) {
 		}
 
 		if !res.Status {
-			return errors.New("unauthorized")
+			return errors.New(zk.host + ": unauthorized")
 		}
 	}
-	zk.Log.Info("การเชื่อมต่อสำเร็จ sessionID", zk.sessionID)
+	zk.Log.Info(zk.host+": การเชื่อมต่อสำเร็จ sessionID", zk.sessionID)
 	return nil
 }
 
@@ -529,10 +529,10 @@ func (zk *ZK) SetUser(user User) error {
 	}
 	res, err := zk.sendCommand(CMD_USER_WRQ, commandString, 50)
 	if err != nil {
-		fmt.Println("AddErr::", err)
+		fmt.Println(zk.host+": AddErr::", err)
 		return err
 	}
-	zk.Log.Info("Add Resp ", res)
+	zk.Log.Info(zk.host+": Add Resp ", res)
 	return nil
 }
 
@@ -591,14 +591,14 @@ func (zk *ZK) processEvent(msg DataMsg) {
 		}
 
 		attLog := &Attendance{UserID: userID, AttendedAt: timestamp, VerifyMethod: uint(unpack[1].(int)), SensorID: zk.machineID}
-		zk.Log.Debug("บันทึกลงเวลา", attLog)
+		zk.Log.Debug(zk.host+": บันทึกลงเวลา", attLog)
 		zk.attLogFunc(attLog)
 	}
 }
 
 func (zk *ZK) LiveCapture(logFunc AttLogFunc) error {
 	if zk.capturing != nil {
-		return errors.New("Is capturing")
+		return errors.New(zk.host + ": Is capturing")
 	}
 
 	if zk.disabled {
@@ -611,7 +611,7 @@ func (zk *ZK) LiveCapture(logFunc AttLogFunc) error {
 		return err
 	}
 
-	zk.Log.Info("เริ่มการรับเหตุการณ์ Realtime")
+	zk.Log.Info(zk.host + ": เริ่มการรับเหตุการณ์ Realtime")
 	zk.capturing = make(chan bool)
 	zk.attLogFunc = logFunc
 	return nil
@@ -637,10 +637,10 @@ func (zk ZK) StopCapture() {
 	if zk.capturing == nil {
 		return
 	}
-	zk.Log.Info("Stopping capturing")
+	zk.Log.Info(zk.host + ": Stopping capturing")
 	zk.regEvent(0)
 	close(zk.capturing)
-	zk.Log.Info("Stopped capturing")
+	zk.Log.Info(zk.host + ": Stopped capturing")
 }
 
 func (zk ZK) Clone() *ZK {
