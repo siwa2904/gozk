@@ -125,14 +125,11 @@ func testTCPTop(packet []byte) int {
 	if len(packet) <= 8 {
 		return 0
 	}
-	fmt.Println("testTCPTopB8:: ", packet[:8])
 	tcpHeader, err := newBP().UnPack([]string{"H", "H", "I"}, packet[:8])
 
 	if err != nil {
-		fmt.Println("testTCPTop Error:: ", err)
 		return 0
 	}
-	fmt.Println("testTCPTop:: ", tcpHeader[0].(int))
 	if tcpHeader[0].(int) == 13876 || tcpHeader[0].(int) == MACHINE_PREPARE_DATA_1 || tcpHeader[1].(int) == MACHINE_PREPARE_DATA_2 {
 
 		return tcpHeader[2].(int)

@@ -320,7 +320,7 @@ func (zk *ZK) Connect() (err error) {
 }
 
 func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (*Response, error) {
-	fmt.Println("command", command)
+
 	if commandString == nil {
 		commandString = make([]byte, 0)
 	}
@@ -347,15 +347,11 @@ func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (
 
 	msg := <-zk.ResponseData
 	zk.lastCMD = 0
-	fmt.Println("msgCode", msg.Head.Code)
 	if msg.Head.Code == CMD_ACK_UNKNOWN {
 		return nil, fmt.Errorf("GOT ERROR %s ON COMMAND %d", msg.Data, command)
 	}
-	fmt.Println("msgData", string(msg.Data))
-	s := msg.Data[:2]
 	// // this will work
-	fmt.Printf("String::%s", string(s))
-	fmt.Println("")
+
 	dataReceived := msg.Data
 	tcpLength := testTCPTop(dataReceived)
 	// fmt.Println(tcpLength)
@@ -476,7 +472,6 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("RecVVV=", v)
 		timestamp, err := zk.decodeTime([]byte(v[3].(string)))
 		if err != nil {
 			return nil, err
@@ -549,7 +544,7 @@ func (zk *ZK) SetUser(user User) error {
 func (zk *ZK) GetUserTemp(uid int, temp_id int, user_id string) error {
 	fmt.Println("GetUserTemp", uid, temp_id)
 	commandString, err := makeGetUsertTmplateCommand(uid, temp_id)
-	fmt.Println(commandString)
+
 	if err != nil {
 		fmt.Println(err)
 		return err
