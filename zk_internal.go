@@ -60,7 +60,7 @@ func (zk *ZK) readWithBuffer(command, fct, ext int) ([]byte, int, error) {
 
 	size := sizeUnpack[0].(int)
 	remain := size % MAX_CHUNK
-	packets := (size - remain) / MAX_CHUNK
+	packets := ((size - remain) / MAX_CHUNK)
 
 	data := []byte{}
 	start := 0

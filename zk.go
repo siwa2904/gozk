@@ -320,7 +320,7 @@ func (zk *ZK) Connect() (err error) {
 }
 
 func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (*Response, error) {
-
+	fmt.Println("command", command)
 	if commandString == nil {
 		commandString = make([]byte, 0)
 	}
@@ -347,14 +347,18 @@ func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (
 
 	msg := <-zk.ResponseData
 	zk.lastCMD = 0
-
+	fmt.Println("msgCode", msg.Head.Code)
 	if msg.Head.Code == CMD_ACK_UNKNOWN {
 		return nil, fmt.Errorf("GOT ERROR %s ON COMMAND %d", msg.Data, command)
 	}
-
+	fmt.Println("msgData", string(msg.Data))
+	s := msg.Data[:2]
+	// // this will work
+	fmt.Printf("String::%s", string(s))
+	fmt.Println("")
 	dataReceived := msg.Data
 	tcpLength := testTCPTop(dataReceived)
-
+	// fmt.Println(tcpLength)
 	zk.replyID = msg.Head.ReplyID
 	zk.lastData = dataReceived
 
@@ -372,6 +376,7 @@ func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (
 			Code:      msg.Head.Code,
 			TCPLength: tcpLength,
 			CommandID: msg.Head.SessionID,
+			Data:      dataReceived,
 		}, nil
 	}
 }
@@ -434,9 +439,10 @@ func (zk *ZK) DisableDevice() error {
 
 // GetAttendances returns a list of attendances
 func (zk *ZK) GetAttendances() ([]*Attendance, error) {
-	if err := zk.GetUsers(); err != nil {
-		return nil, err
-	}
+	// if err := zk.GetUsers(); err != nil {
+	// 	fmt.Println("GetUsersErr2::", err)
+	// 	return nil, err
+	// }
 
 	records, err := zk.readSize()
 	if err != nil {
@@ -485,6 +491,8 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 		data = data[40:]
 	}
 
+	fmt.Println("attendances", attendances)
+
 	return attendances, nil
 }
 
@@ -492,14 +500,16 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 // For now, just run this func. I'll implement this function later on.
 func (zk *ZK) GetUsers() error {
 
-	_, err := zk.readSize()
+	sizes, err := zk.readSize()
+
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("sizes Users", sizes)
+	fmt.Println("CMD_USERTEMP_RRQ", CMD_USERTEMP_RRQ)
 	data, size, err := zk.readWithBuffer(CMD_USERTEMP_RRQ, FCT_USER, 0)
 	if err != nil {
-		fmt.Println("GetUsersErr::", err)
+		fmt.Println("GetUsersErr:ss:", err)
 		return err
 	}
 
@@ -537,22 +547,19 @@ func (zk *ZK) SetUser(user User) error {
 }
 
 func (zk *ZK) GetUserTemp(uid int, temp_id int, user_id string) error {
-	_, err := zk.readSize()
+	fmt.Println("GetUserTemp", uid, temp_id)
+	commandString, err := makeGetUsertTmplateCommand(uid, temp_id)
+	fmt.Println(commandString)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
-
-	data, size, err := zk.readWithBuffer(CMD_DB_RRQ, FCT_FINGERTMP, 0)
+	res, err := zk.sendCommand(CMD_GET_USERTEMP, commandString, (1024 + 8))
 	if err != nil {
-		fmt.Println("GetUsersErr::", err)
+		fmt.Println(zk.host+": GetErr::", err)
 		return err
 	}
-
-	if size < 4 {
-		fmt.Println("GetUsersErr<4::", size)
-		return nil
-	}
-	fmt.Println("data", data)
+	zk.Log.Info(zk.host+": Get Resp:: ", res.Status)
 	return nil
 }
 
@@ -616,6 +623,17 @@ func (zk *ZK) LiveCapture(logFunc AttLogFunc) error {
 	zk.attLogFunc = logFunc
 	return nil
 }
+func (zk *ZK) GetTime() (time.Time, error) {
+	res, err := zk.sendCommand(CMD_GET_TIME, nil, 1032)
+	if err != nil {
+		return time.Now(), err
+	}
+	if !res.Status {
+		return time.Now(), errors.New("can not get time")
+	}
+
+	return zk.decodeTime(res.Data[:4])
+}
 
 func (zk *ZK) SetTime(settime time.Time) error {
 	// zk.encodeTime()
@@ -652,4 +670,50 @@ func (zk ZK) Clone() *ZK {
 		sessionID: 0,
 		replyID:   USHRT_MAX - 1,
 	}
+}
+
+func (zk *ZK) GetAttendance() error {
+
+	si, err := zk.readSize()
+	if err != nil {
+		return err
+	}
+	fmt.Println("si", si)
+	data, size, err := zk.readWithBuffer(CMD_ATTLOG_RRQ, 0, 0)
+	if err != nil {
+		fmt.Println("GetAttErr::", err)
+		return err
+	}
+
+	if size < 4 {
+		fmt.Println("GetAttErr<4::", size)
+		return nil
+	}
+	// []string{"I"}, zk.lastData[1:5]
+	// total_size := newBP().UnPack([]string{"I"}, data[4])[0]
+	fmt.Println("Attdata", data)
+	return nil
+}
+
+func (zk *ZK) GetTemplates() error {
+	// templates := []map[string]interface{}{}
+	fmt.Println("GetTemplates")
+	templatedata, size, err := zk.readWithBuffer(CMD_DB_RRQ, FCT_FINGERTMP, 0)
+	if err != nil {
+		fmt.Println("GetTempErr::", err)
+		return err
+	}
+	if size < 4 {
+		fmt.Println("WRN: no user data")
+		return nil
+	}
+	ts, err2 := newBP().UnPack([]string{"I"}, templatedata[0:4])
+	if err2 != nil {
+		fmt.Println("GetTempErr::", err2)
+		return err2
+	}
+	totalSize := ts[0].(int)
+	fmt.Println("get template total size ?, size ? len ?", totalSize, size, len(templatedata))
+
+	return nil
 }

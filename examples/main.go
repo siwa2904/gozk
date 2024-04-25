@@ -12,20 +12,31 @@ import (
 )
 
 func main() {
-	zkSocket := gozk.NewZK(0, "192.168.1.253", 4370, 0, gozk.DefaultTimezone)
+	zkSocket := gozk.NewZK(1, "192.168.1.250", 4370, 0, gozk.DefaultTimezone)
 	if err := zkSocket.Connect(); err != nil {
 		panic(err)
 	}
 
-	// c := make(chan *gozk.Attendance, 50)
+	c := make(chan *gozk.Attendance, 50)
+	// zkSocket.GetAttendances()
+	// zkSocket.GetUserTemp(1, 2, "2")
 
 	if err := zkSocket.LiveCapture(myLogFunc); err != nil {
 		panic(err)
 	}
-
-	go RepleTime(zkSocket)
+	// zkSocket.GetTemplates()
+	// go RepleTime(zkSocket)
+	zkSocket.DisableDevice()
 	// zkSocket.GetUsers()
-
+	attr, err := zkSocket.GetAttendances()
+	if err != nil {
+		fmt.Println("Error", err.Error())
+	}
+	fmt.Println("LogTime::", attr)
+	for _, attr := range attr {
+		fmt.Println("Attr::", attr.UserID, attr.AttendedAt)
+	}
+	zkSocket.EnableDevice()
 	// dateString := "2023-05-03 16:59:00"
 	// //convert string to time.Time
 	// layout := "2006-01-02 15:04:05"
@@ -60,11 +71,11 @@ func main() {
 	// 	fmt.Println(err)
 	// }
 
-	// go func() {
-	// 	for event := range c {
-	// 		log.Println(event)
-	// 	}
-	// }()
+	go func() {
+		for event := range c {
+			log.Println(event)
+		}
+	}()
 
 	gracefulQuit(zkSocket.StopCapture)
 }
@@ -75,11 +86,11 @@ func RepleTime(zs *gozk.ZK) {
 	fmt.Println(cTime.Hour(), cTime.Minute())
 	if cTime.Hour() == 16 && cTime.Minute() >= 58 {
 		fmt.Println("Reset")
-		dateString := "2023-05-04 16:58:00"
+		//dateString := "2023-05-04 16:58:00"
 		//convert string to time.Time
-		layout := "2006-01-02 15:04:05"
-		t, _ := time.Parse(layout, dateString)
-		err := zs.SetTime(t)
+		//layout := "2006-01-02 15:04:05"
+		//t, _ := time.Parse(layout, dateString)
+		err := zs.SetTime(time.Now())
 		if err != nil {
 			fmt.Println(err)
 		}

@@ -127,13 +127,14 @@ func testTCPTop(packet []byte) int {
 	}
 	fmt.Println("testTCPTopB8:: ", packet[:8])
 	tcpHeader, err := newBP().UnPack([]string{"H", "H", "I"}, packet[:8])
-	fmt.Println("testTCPTopB8UP:: ", tcpHeader)
+
 	if err != nil {
 		fmt.Println("testTCPTop Error:: ", err)
 		return 0
 	}
-
+	fmt.Println("testTCPTop:: ", tcpHeader[0].(int))
 	if tcpHeader[0].(int) == 13876 || tcpHeader[0].(int) == MACHINE_PREPARE_DATA_1 || tcpHeader[1].(int) == MACHINE_PREPARE_DATA_2 {
+
 		return tcpHeader[2].(int)
 	}
 
@@ -184,6 +185,7 @@ func makeGetUsertTmplateCommand(uid int, temp int) ([]byte, error) {
 	if err != nil {
 		fmt.Println("makeGetUsertTmplateCommand Error:: ", err)
 	}
+	fmt.Println("makeGetUsertTmplateCommand:: ", bpData)
 	return bpData, err
 }
 func mustUnpack(pad []string, data []byte) []interface{} {
@@ -201,7 +203,7 @@ func getDataSize(rescode int, data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-
+		fmt.Println("getDataSize:: ", sizeUnpack[0].(int))
 		return sizeUnpack[0].(int), nil
 	}
 
