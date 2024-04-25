@@ -606,11 +606,6 @@ func (zk *ZK) processEvent(msg DataMsg) {
 			data = data[52:]
 		}
 
-		fmt.Println("set_0", unpack[0].(string))
-		fmt.Println("set_1", strconv.Itoa(unpack[1].(int)))
-		fmt.Println("set_2", strconv.Itoa(unpack[2].(int)))
-		fmt.Println("set_3", unpack[3].(string))
-
 		timestamp := zk.decodeTimeHex([]byte(unpack[3].(string)))
 
 		userID, err := strconv.ParseInt(strings.Replace(unpack[0].(string), "\x00", "", -1), 10, 64)
