@@ -491,29 +491,56 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 	return attendances, nil
 }
 
+func (zk *ZK) ClearAttendance() error {
+	_, err := zk.sendCommand(CMD_CLEAR_ATTLOG, nil, 8)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // GetUsers returns a list of users
 // For now, just run this func. I'll implement this function later on.
-func (zk *ZK) GetUsers() error {
-
-	sizes, err := zk.readSize()
-
+func (zk *ZK) GetUsers() ([]*User, error) {
+	records, err := zk.readSize()
 	if err != nil {
-		return err
+		fmt.Println("GetUsersErr::::", err)
+		return nil, err
 	}
-	fmt.Println("sizes Users", sizes)
-	fmt.Println("CMD_USERTEMP_RRQ", CMD_USERTEMP_RRQ)
-	data, size, err := zk.readWithBuffer(CMD_USERTEMP_RRQ, FCT_USER, 0)
+	userdata, size, err := zk.readWithBuffer(CMD_USERTEMP_RRQ, FCT_USER, 0)
 	if err != nil {
-		fmt.Println("GetUsersErr:ss:", err)
-		return err
+		fmt.Println("GetUsersErr0::", err)
+		return nil, err
 	}
-
 	if size < 4 {
-		fmt.Println("GetUsersErr<4::", size)
-		return nil
+		fmt.Println("GetUsersErr5::", err)
+		return []*User{}, nil
 	}
-	fmt.Println("data", data)
-	return nil
+	totalSizeByte := userdata[:4]
+	userdata = userdata[4:]
+	totalSize := mustUnpack([]string{"I"}, totalSizeByte)[0].(int)
+	recordSize := totalSize / records
+
+	user := []*User{}
+	if recordSize == 28 {
+		for len(userdata) >= 28 {
+			v, err := newBP().UnPack([]string{"H", "B", "5s", "8s", "s", "I", "x", "B", "h", "I"}, userdata[:28])
+			if err != nil {
+				fmt.Println("GetUsersErr::", err)
+				return nil, err
+			}
+			userID, err := strconv.ParseInt(strings.Replace(v[2].(string), "\x00", "", -1), 10, 64)
+			if err != nil {
+				fmt.Println("GetUsersErr2::", err)
+				return nil, err
+			}
+			user = append(user, &User{UID: userID, UserID: v[2].(string), Name: v[3].(string), Privilege: v[4].(int), Password: v[5].(string), GroupID: v[6].(int), Card: v[7].(string)})
+			userdata = userdata[28:]
+		}
+	}
+
+	fmt.Println("data", userdata)
+	return user, nil
 }
 
 func (zk *ZK) SetUser(user User) error {
@@ -693,6 +720,12 @@ func (zk *ZK) GetAttendance() error {
 func (zk *ZK) GetTemplates() error {
 	// templates := []map[string]interface{}{}
 	fmt.Println("GetTemplates")
+	_, err := zk.readSize()
+	if err != nil {
+		fmt.Println("GetTempErr00::", err)
+		return err
+	}
+
 	templatedata, size, err := zk.readWithBuffer(CMD_DB_RRQ, FCT_FINGERTMP, 0)
 	if err != nil {
 		fmt.Println("GetTempErr::", err)

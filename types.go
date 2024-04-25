@@ -15,7 +15,7 @@ type Response struct {
 }
 
 type User struct {
-	UID       int
+	UID       int64
 	UserID    string
 	Name      string
 	Privilege int

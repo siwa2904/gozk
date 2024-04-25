@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	zkSocket := gozk.NewZK(1, "192.168.1.250", 4370, 0, gozk.DefaultTimezone)
+	zkSocket := gozk.NewZK(1, "192.168.1.253", 4370, 0, gozk.DefaultTimezone)
 	if err := zkSocket.Connect(); err != nil {
 		panic(err)
 	}
@@ -26,8 +26,12 @@ func main() {
 	}
 	// zkSocket.GetTemplates()
 	// go RepleTime(zkSocket)
+	// zkSocket.DisableDevice()
+	// zkSocket.GetTemplates()
+	// zkSocket.EnableDevice()
+
 	zkSocket.DisableDevice()
-	// zkSocket.GetUsers()
+
 	attr, err := zkSocket.GetAttendances()
 	if err != nil {
 		fmt.Println("Error", err.Error())

@@ -40,7 +40,8 @@ func TestSocketGetUsers(t *testing.T) {
 	socket := NewZK(0, testZkHost, testZkPort, 0, testTimezone)
 	require.NoError(t, socket.Connect())
 	defer socket.Disconnect()
-	require.NoError(t, socket.GetUsers())
+	_, err := socket.GetUsers()
+	require.NoError(t, err)
 }
 
 func BenchmarkSocketGetAttendances(b *testing.B) {

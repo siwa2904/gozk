@@ -31,7 +31,9 @@ func (zk *ZK) readWithBuffer(command, fct, ext int) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+
 	res, err := zk.sendCommand(1503, commandString, 1024)
+	fmt.Println("res", res)
 	if err != nil {
 		return nil, 0, err
 	}
