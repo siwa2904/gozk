@@ -578,12 +578,13 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 			// fmt.Println("5", v[5])
 			// fmt.Println("6", v[6])
 			// gID, _ := strconv.Atoi(v[1].(string))
+
 			user = append(user, &User{
 				UID:       id,
-				UserID:    v[6].(string),
-				Name:      v[3].(string),
+				UserID:    strings.Replace(v[6].(string), "\x00", "", -1),
+				Name:      strings.Replace(v[3].(string), "\x00", "", -1),
 				Privilege: v[1].(int),
-				Password:  v[2].(string),
+				Password:  strings.Replace(v[2].(string), "\x00", "", -1),
 				GroupID:   v[1].(int),
 				Card:      strconv.Itoa(v[4].(int))})
 			userdata = userdata[72:]

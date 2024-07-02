@@ -38,7 +38,7 @@ func main() {
 	}
 	fmt.Println("LogTime::", attr)
 	for _, attr := range attr {
-		fmt.Println("Attr::", attr.UserID, attr.UserID)
+		fmt.Println("Attr::", attr.UserID, attr.UserID, attr.Name, attr.Card)
 	}
 	zkSocket.EnableDevice()
 	// dateString := "2023-05-03 16:59:00"
