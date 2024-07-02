@@ -568,15 +568,15 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 				fmt.Println("GetUsersErr2::", err)
 				return nil, err
 			}
-			fmt.Println("data", v)
+			// fmt.Println("data", v)
 			// 0=UID,1=Privilege,2=Password,3=Name 4=CardNo,6=UserID
-			fmt.Println("0", v[0])
-			fmt.Println("1", v[1])
-			fmt.Println("2", v[2])
-			fmt.Println("3", v[3])
-			fmt.Println("4", v[4])
-			fmt.Println("5", v[5])
-			fmt.Println("6", v[6])
+			// fmt.Println("0", v[0])
+			// fmt.Println("1", v[1])
+			// fmt.Println("2", v[2])
+			// fmt.Println("3", v[3])
+			// fmt.Println("4", v[4])
+			// fmt.Println("5", v[5])
+			// fmt.Println("6", v[6])
 			// gID, _ := strconv.Atoi(v[1].(string))
 			user = append(user, &User{
 				UID:       id,
