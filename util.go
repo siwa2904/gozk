@@ -130,7 +130,7 @@ func testTCPTop(packet []byte) int {
 	if err != nil {
 		return 0
 	}
-	if tcpHeader[0].(int) == 13876 || tcpHeader[0].(int) == MACHINE_PREPARE_DATA_1 || tcpHeader[1].(int) == MACHINE_PREPARE_DATA_2 {
+	if tcpHeader[0].(int) == MACHINE_PREPARE_DATA_1 || tcpHeader[1].(int) == MACHINE_PREPARE_DATA_2 {
 
 		return tcpHeader[2].(int)
 	}

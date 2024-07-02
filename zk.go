@@ -202,8 +202,8 @@ func (zk *ZK) dataReceive() {
 			msg.Head.ReplyID = header[3].(int)
 			msg.Data = data[16:]
 
-			datas := mustUnpack([]string{"H", "H", "H", "H"}, data[:16])
-			fmt.Println(zk.host+": Datasssss::", datas)
+			// datas := mustUnpack([]string{"H", "H", "H", "H"}, data[:16])
+			// fmt.Println(zk.host+": Datasssss::", datas)
 			// zk.Log.Debug("Response[USER]:", msg)
 			if msg.Head.Code == CMD_REG_EVENT {
 				zk.processEvent(msg)
@@ -319,6 +319,16 @@ func (zk *ZK) Connect() (err error) {
 	return nil
 }
 
+func (zk *ZK) Restart() (err error) {
+	res, err := zk.sendCommand(CMD_RESTART, nil, 8)
+	if err != nil {
+		return err
+	}
+	if !res.Status {
+		return errors.New("Failed to restart device")
+	}
+	return nil
+}
 func (zk *ZK) sendCommand(command int, commandString []byte, responseSize int) (*Response, error) {
 
 	if commandString == nil {
@@ -520,7 +530,10 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 	userdata = userdata[4:]
 	totalSize := mustUnpack([]string{"I"}, totalSizeByte)[0].(int)
 	recordSize := totalSize / records
-
+	fmt.Println(recordSize)
+	fmt.Println(totalSize)
+	fmt.Println(records)
+	fmt.Println(len(userdata))
 	user := []*User{}
 	if recordSize == 28 {
 		for len(userdata) >= 28 {
@@ -529,17 +542,55 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 				fmt.Println("GetUsersErr::", err)
 				return nil, err
 			}
+			fmt.Println(v[0])
 			userID, err := strconv.ParseInt(strings.Replace(v[2].(string), "\x00", "", -1), 10, 64)
 			if err != nil {
 				fmt.Println("GetUsersErr2::", err)
 				return nil, err
 			}
+			fmt.Println(userID)
 			user = append(user, &User{UID: userID, UserID: v[2].(string), Name: v[3].(string), Privilege: v[4].(int), Password: v[5].(string), GroupID: v[6].(int), Card: v[7].(string)})
 			userdata = userdata[28:]
 		}
+	} else {
+		for len(userdata) >= 72 {
+			// v, err := newBP().UnPack([]string{"H", "B", "5s", "8s", "s", "I", "x", "B", "h", "I"}, userdata[:28])
+			HB8s24sIx7sx24s := []string{"H", "B", "8s", "24s", "I", "7s", "24s"}
+			v, err := newBP().UnPack(HB8s24sIx7sx24s, userdata[:72])
+			if err != nil {
+				fmt.Println("GetUsersErr::", err)
+				return nil, err
+			}
+			fmt.Println(v[0])
+			id := int64(v[0].(int))
+			// userID, err := strconv.ParseInt(id, 10, 64)
+			if err != nil {
+				fmt.Println("GetUsersErr2::", err)
+				return nil, err
+			}
+			fmt.Println("data", v)
+			// 0=UID,1=Privilege,2=Password,3=Name 4=CardNo,6=UserID
+			fmt.Println("0", v[0])
+			fmt.Println("1", v[1])
+			fmt.Println("2", v[2])
+			fmt.Println("3", v[3])
+			fmt.Println("4", v[4])
+			fmt.Println("5", v[5])
+			fmt.Println("6", v[6])
+			// gID, _ := strconv.Atoi(v[1].(string))
+			user = append(user, &User{
+				UID:       id,
+				UserID:    v[6].(string),
+				Name:      v[3].(string),
+				Privilege: v[1].(int),
+				Password:  v[2].(string),
+				GroupID:   v[1].(int),
+				Card:      strconv.Itoa(v[4].(int))})
+			userdata = userdata[72:]
+		}
 	}
 
-	fmt.Println("data", userdata)
+	fmt.Println("data", user)
 	return user, nil
 }
 
@@ -591,7 +642,7 @@ func (zk *ZK) processEvent(msg DataMsg) {
 	//อาจมีบันทึกหลายรายการในข้อมูลหนึ่งๆ ซึ่งจะถูกประมวลผลโดยตรงในลูปที่นี่
 	for len(data) >= 12 {
 		var unpack []interface{}
-		fmt.Println(data)
+		// fmt.Println(data)
 		if len(data) == 12 {
 			unpack = mustUnpack([]string{"I", "B", "B", "6s"}, data)
 			data = data[12:]
@@ -717,22 +768,22 @@ func (zk *ZK) GetTemplates() error {
 	fmt.Println("GetTemplates")
 	_, err := zk.readSize()
 	if err != nil {
-		fmt.Println("GetTempErr00::", err)
+		// fmt.Println("GetTempErr00::", err)
 		return err
 	}
 
 	templatedata, size, err := zk.readWithBuffer(CMD_DB_RRQ, FCT_FINGERTMP, 0)
 	if err != nil {
-		fmt.Println("GetTempErr::", err)
+		// fmt.Println("GetTempErr::", err)
 		return err
 	}
 	if size < 4 {
-		fmt.Println("WRN: no user data")
+		// fmt.Println("WRN: no user data")
 		return nil
 	}
 	ts, err2 := newBP().UnPack([]string{"I"}, templatedata[0:4])
 	if err2 != nil {
-		fmt.Println("GetTempErr::", err2)
+		// fmt.Println("GetTempErr::", err2)
 		return err2
 	}
 	totalSize := ts[0].(int)
