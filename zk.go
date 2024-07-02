@@ -543,7 +543,7 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 				return nil, err
 			}
 			fmt.Println(v[0])
-			userID, err := strconv.ParseInt(strings.Replace(v[2].(string), "\x00", "", -1), 10, 64)
+			userID, err := strconv.Atoi(strings.Replace(v[2].(string), "\x00", "", -1))
 			if err != nil {
 				fmt.Println("GetUsersErr2::", err)
 				return nil, err
@@ -562,7 +562,7 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 				return nil, err
 			}
 			fmt.Println(v[0])
-			id := int64(v[0].(int))
+			id := v[0].(int)
 			// userID, err := strconv.ParseInt(id, 10, 64)
 			if err != nil {
 				fmt.Println("GetUsersErr2::", err)

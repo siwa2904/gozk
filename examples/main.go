@@ -41,39 +41,6 @@ func main() {
 		fmt.Println("Attr::", attr.UserID, attr.UserID, attr.Name, attr.Card)
 	}
 	zkSocket.EnableDevice()
-	// dateString := "2023-05-03 16:59:00"
-	// //convert string to time.Time
-	// layout := "2006-01-02 15:04:05"
-	// t, err := time.Parse(layout, dateString)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-
-	// zkSocket.SetTime(time.Now())
-	// zkSocket.GetUserTemp(2, 50, "2")
-	// zkSocket.GetUserTemp(2, 1, "2")
-	// zkSocket.GetUserTemp(2, 2, "2")
-	// zkSocket.GetUserTemp(2, 3, "2")
-	// zkSocket.GetUserTemp(2, 4, "2")
-	// zkSocket.GetUserTemp(2, 5, "2")
-	// zkSocket.GetUserTemp(2, 6, "2")
-	// zkSocket.GetUserTemp(2, 7, "2")
-	// zkSocket.GetUserTemp(2, 8, "2")
-	// zkSocket.GetUserTemp(2, 9, "2")
-	// zkSocket.GetUserTemp(2, 0, "2")
-	// nwU := gozk.User{
-	// 	UID:       1324,
-	// 	UserID:    "1324",
-	// 	Name:      "Siwapong",
-	// 	Privilege: 0,
-	// 	Password:  "",
-	// 	GroupID:   0,
-	// 	Card:      "9876543",
-	// }
-	// err := zkSocket.SetUser(nwU)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
 
 	go func() {
 		for event := range c {
