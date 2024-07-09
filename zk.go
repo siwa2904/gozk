@@ -517,6 +517,7 @@ func (zk *ZK) GetUsers() ([]*User, error) {
 		fmt.Println("GetUsersErr::::", err)
 		return nil, err
 	}
+	fmt.Println("records", records)
 	userdata, size, err := zk.readWithBuffer(CMD_USERTEMP_RRQ, FCT_USER, 0)
 	if err != nil {
 		fmt.Println("GetUsersErr0::", err)

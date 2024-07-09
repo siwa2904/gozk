@@ -36,9 +36,9 @@ func main() {
 	if err != nil {
 		fmt.Println("Error", err.Error())
 	}
-	fmt.Println("LogTime::", attr)
+	fmt.Println("USER::", attr)
 	for _, attr := range attr {
-		fmt.Println("Attr::", attr.UserID, attr.UserID, attr.Name, attr.Card)
+		fmt.Println("USER::", attr.UserID, attr.UserID, attr.Name, attr.Card)
 	}
 	zkSocket.EnableDevice()
 
