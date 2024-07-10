@@ -468,6 +468,9 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 	data = data[4:]
 
 	totalSize := mustUnpack([]string{"I"}, totalSizeByte)[0].(int)
+	if totalSize == 0 || records == 0 {
+		return nil, errors.New("No records found")
+	}
 	recordSize := totalSize / records
 	attendances := []*Attendance{}
 
