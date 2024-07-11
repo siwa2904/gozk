@@ -468,6 +468,7 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 	data = data[4:]
 
 	totalSize := mustUnpack([]string{"I"}, totalSizeByte)[0].(int)
+
 	if totalSize == 0 || records == 0 {
 		return nil, errors.New("No records found")
 	}
@@ -479,6 +480,11 @@ func (zk *ZK) GetAttendances() ([]*Attendance, error) {
 
 	}
 
+	fmt.Println("recordSize::", recordSize)
+	fmt.Println("totalSize::", totalSize)
+	fmt.Println("records::", records)
+	fmt.Println("attendances::", len(attendances))
+	fmt.Println("data::", len(data))
 	for len(data) >= 40 {
 
 		v, err := newBP().UnPack([]string{"H", "24s", "B", "4s", "B", "8s"}, data[:40])

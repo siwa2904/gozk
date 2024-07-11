@@ -40,6 +40,16 @@ func main() {
 	for _, attr := range attr {
 		fmt.Println("USER::", attr.UserID, attr.UserID, attr.Name, attr.Card)
 	}
+
+	attrLog, err := zkSocket.GetAttendances()
+	if err != nil {
+		fmt.Println("Error", err.Error())
+	}
+	fmt.Println("LogTime::", attrLog)
+	for _, attr := range attrLog {
+		fmt.Println("Attr::", attr.UserID, attr.AttendedAt)
+	}
+
 	zkSocket.EnableDevice()
 
 	go func() {
